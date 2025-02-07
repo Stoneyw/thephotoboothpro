@@ -1,0 +1,20 @@
+{
+  "name": "photo-booth-app",
+  "version": "1.0.0",
+  "description": "Photo Booth App for event albums",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+    "multer": "^1.4.3",
+    "nodemailer": "^6.4.11",
+    "qrcode": "^1.4.4",
+    "bcrypt": "^5.0.1",
+    "jsonwebtoken": "^8.5.1",
+    "cors": "^2.8.5",
+    "twilio": "^3.68.0",
+    "node-cron": "^3.0.0"
+  }
+}
