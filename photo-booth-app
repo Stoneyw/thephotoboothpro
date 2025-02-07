@@ -10,15 +10,15 @@ const cors = require('cors');
 const twilio = require('twilio');
 const cron = require('node-cron');
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const SECRET_KEY = 'your_secret_key';
-const twilioClient = new twilio('TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN');
+const twilioClient = new twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public'));
-app.use('/uploads', express.static('uploads'));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const users = {}; // Store users in-memory for simplicity
 const events = {}; // Store event data
@@ -56,16 +56,6 @@ app.post('/login', async (req, res) => {
     res.json({ token });
 });
 
-// Frontend UI
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Dashboard for event organizers
-app.get('/dashboard', authenticate, (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
-});
-
 // Create an event
 app.post('/create_event', authenticate, (req, res) => {
     const { eventId, eventName } = req.body;
@@ -87,7 +77,7 @@ app.post('/invite_guest', authenticate, (req, res) => {
     const eventUrl = `https://thephotoboothpro.onrender.com/gallery/${eventId}`;
     twilioClient.messages.create({
         body: `You're invited to view and share photos for ${events[eventId].eventName}. Click here: ${eventUrl}`,
-        from: 'YOUR_TWILIO_PHONE_NUMBER',
+        from: process.env.YOUR_TWILIO_PHONE_NUMBER,
         to: phoneNumber
     }).then(() => res.json({ message: 'Invitation sent successfully' }))
     .catch(error => res.status(500).json({ error: 'Error sending SMS' }));
@@ -101,6 +91,21 @@ app.get('/gallery/:eventId', authenticate, (req, res) => {
 });
 
 // Upload photo to event album
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const eventId = req.params.eventId;
+        const dir = path.join(__dirname, 'uploads', eventId);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+        cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage: storage });
+
 app.post('/upload/:eventId', authenticate, upload.single('photo'), (req, res) => {
     const eventId = req.params.eventId;
     if (!events[eventId]) return res.status(404).json({ error: 'Event not found' });
@@ -109,27 +114,22 @@ app.post('/upload/:eventId', authenticate, upload.single('photo'), (req, res) =>
     res.json({ message: 'Photo uploaded successfully', filePath });
 });
 
-// Confirm deletion before deleting event photos
-app.delete('/delete_event/:eventId', authenticate, (req, res) => {
-    const eventId = req.params.eventId;
-    if (!events[eventId]) return res.status(404).json({ error: 'Event not found' });
-    
-    delete events[eventId];
-    fs.rmdirSync(`./uploads/${eventId}`, { recursive: true });
-    res.json({ message: 'Event deleted successfully' });
-});
-
 // Auto-delete events after 15 days
 cron.schedule('0 0 * * *', () => {
     const now = new Date();
     Object.keys(events).forEach(eventId => {
         if ((now - events[eventId].createdAt) > 15 * 24 * 60 * 60 * 1000) {
             delete events[eventId];
-            fs.rmdirSync(`./uploads/${eventId}`, { recursive: true });
+            fs.rmdirSync(path.join(__dirname, 'uploads', eventId), { recursive: true });
         }
     });
     console.log('Old events deleted');
 });
+
+app.listen(PORT, () => {
+    console.log(`Server running on https://thephotoboothpro.onrender.com`);
+});
+
 
 app.listen(PORT, () => {
     console.log(`Server running on https://thephotoboothpro.onrender.com`);
